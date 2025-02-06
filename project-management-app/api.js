@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = 'http://192.168.100.21:5000';
+const API_URL = 'http://192.168.188.109:5000';
+
+console.log(API_URL);
 
 //PROJECTS
 export const getProjects = async () => {

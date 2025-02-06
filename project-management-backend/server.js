@@ -1,10 +1,28 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-import {pool} from './db'
+const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
+
+require('dotenv').config();
+
+const API_URL = 'http://192.168.188.109:5000';
+
+console.log(API_URL);
+
+const pool = new Pool({
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT
+});
+
+const jwtToken = process.env.JWT_SECRET
+
 
 const app = express();
-app.use(cors());
+// app.use(cors());
 app.use(bodyParser.json());
 
 const corsOptions = {
@@ -15,6 +33,7 @@ app.use(cors(corsOptions));
 
 // PROJECTS
 app.get('/projects', async (req, res) => {
+  console.log('getting projects...');
   try {
     const query = `SELECT * FROM projects ORDER BY updated_at`;
     const result = await pool.query(query);
@@ -150,11 +169,6 @@ app.post('/users', async (req, res) => {
       return res.status(400).json({ field: 'tel', error: 'User with this phone number already exists' });
     }
 
-    // Generează salt și hash pentru parolă
-    // const saltRounds = 10;
-    // const hashedPassword = await bcrypt.hash(password, saltRounds);
-    // console.log('hashedPassword', hashedPassword);
-
     const result = await pool.query(
       `INSERT INTO users (email, name, role, tel, password) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [email, name, role, tel, password]
@@ -183,29 +197,6 @@ app.delete('/users/:id', async (req, res) => {
   }
 });
 
-// app.put('/users/:id', async (req, res) => {
-//   const { id } = req.params; 
-//   const { email, name, role, tel, location, status } = req.body;
-//   // console.log('Received project data: id ', id, " data ", name, description, category_id, status, deadline);
- 
-//   try {
-//     const existingUser = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-//     if (existingUser.rows.length === 0) {
-//       return res.status(404).json({ message: 'User not found' });
-//     }
-
-//     await pool.query(
-//       'UPDATE users SET email = $1, name = $2, role = $3, tel = $4, location = $5, status = $6 WHERE id = $7',
-//       [email, name, role, tel, location, status, id]
-//     );
-
-//     res.status(200).json({ message: 'User updated successfully' });
-//   } catch (error) {
-//     console.error('Error updating user:', error);
-//     res.status(500).json({ message: 'Failed to update user' });
-//   }
-// });
-
 app.patch('/users/:id', async (req, res) => {
   const { id } = req.params; 
   const { email, name, role, tel, location, status } = req.body;
@@ -216,7 +207,6 @@ app.patch('/users/:id', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Actualizare parțială - doar câmpurile care sunt trimise în request vor fi actualizate
     const fieldsToUpdate = [];
     const values = [];
 
@@ -245,7 +235,6 @@ app.patch('/users/:id', async (req, res) => {
       values.push(status);
     }
 
-    // Adăugăm ID-ul utilizatorului la finalul valorilor
     values.push(id);
 
     const updateQuery = 'UPDATE users SET ' + fieldsToUpdate.join(', ') + ' WHERE id = $' + (values.length);
@@ -260,8 +249,7 @@ app.patch('/users/:id', async (req, res) => {
 });
 
 
-const jwt = require('jsonwebtoken');
-const JWT_SECRET = '3r9hv$u68*czwX@kLpdzq42nA9vZ8#G'; 
+// const JWT_SECRET = pool.jwtToken; 
 
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
@@ -285,7 +273,7 @@ app.post('/login', async (req, res) => {
 
     const { password: _, ...userData } = user;
 
-    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, jwtToken, { expiresIn: '30d' });
     
     res.json({ userData, token });
 
@@ -296,7 +284,14 @@ app.post('/login', async (req, res) => {
 });
 
 const verifyToken = (req, res, next) => {
-  const token = req.header('Authorization')?.replace('Bearer ', ''); // Obține token-ul din antet
+  // const token = req.header('Authorization')?.replace('Bearer ', ''); // Obține token-ul din antet
+
+  const authHeader = req.headers.authorization;
+if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  return res.status(401).json({ message: 'Access denied. No token provided.' });
+}
+const token = authHeader.split(' ')[1];
+
 
   if (!token) {
     return res.status(401).json({ message: 'Access denied. No token provided.' });
@@ -304,7 +299,7 @@ const verifyToken = (req, res, next) => {
 
   try {
     // Verifică token-ul
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, jwtToken);
     req.user = decoded; // Salvează datele decodificate ale utilizatorului în `req.user`
     next(); // Continuă cu rutele protejate
   } catch (error) {

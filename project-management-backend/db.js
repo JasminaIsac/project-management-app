@@ -12,8 +12,8 @@ const pool = new Pool({
   host: process.env.DB_HOST,       // Database host
   database: process.env.DB_NAME,   // Database name
   password: process.env.DB_PASSWORD,// Database password
-  port: process.env.DB_PORT,       // Database port, typically 5432
+  port: process.env.DB_PORT       // Database port, typically 5432
 });
 
 // Export the pool instance for use in other files
-module.exports = pool;
+module.exports = { pool, jwtToken: process.env.JWT_SECRET };
